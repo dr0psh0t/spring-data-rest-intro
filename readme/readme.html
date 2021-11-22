@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Introduction to Spring Data REST</title>
+    <meta charset="utf-8">
+    <meta name=viewport content="width=device-width, initial-scale=1, maximum-scale=1">
+</head>
+<body style="margin: 50px;">
+
+<h2>1. Overview</h2>
+This article will explain the basics of Spring Data REST and show how to use it to build a simple REST API.
+
+In general, Spring Data REST is built on top of the Spring Data project and makes it easy to build hypermedia-driven REST web services that connect to Spring Data repositories – all using HAL as the driving hypermedia type.
+
+It takes away a lot of the manual work usually associated with such tasks and makes implementing basic CRUD functionality for web applications quite simple.
+<br><br>
+<h2>2. Maven Dependencies</h2>
+The following Maven dependencies are required for our simple application:
+<br><br>
+<textarea readonly rows="26" cols="60">
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId
+    <artifactId>spring-boot-starter-data-rest</artifactId></dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-jpa</artifactId>
+</dependency>
+<dependency>
+    <groupId>com.h2database</groupId>
+    <artifactId>h2</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.mariadb.jdbc</groupId>
+    <artifactId>mariadb-java-client</artifactId>
+    <scope>runtime</scope>
+</dependency>
+<dependency>
+    <groupId>org.projectlombok</groupId>
+    <artifactId>lombok</artifactId>
+    <optional>true</optional>
+</dependency>
+</textarea>
+<br>
+We decided to use Spring Boot for this example, but classic Spring will also work fine. We also chose to use the H2 embedded database in order to avoid any extra setup, but the example can be applied to any database.
+<br>
+<h2>2.1 Configure properties</h2>
+<br>
+Create a database named "test". But don't create any table. A table is automatically created when making a model class.
+<br>
+<textarea readonly rows="21" cols="60">
+spring.datasource.url=jdbc:mariadb://192.168.1.30:3306/test
+spring.datasource.username=mcsacrm
+spring.datasource.password=mcsa12345
+
+#validate: validate the schema, makes no changes to the database.
+#update: update the schema.
+#create: creates the schema, destroying previous data.
+#create-drop: drop the schema at the end of the session
+#none: is all other cases.
+spring.jpa.hibernate.ddl-auto=update
+
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MariaDBDialect
+spring.jpa.properties.hibernate.format_sql=true
+
+server.servlet.session.cookie.http-only=true
+server.servlet.session.cookie.secure=true
+
+server.port=8081
+</textarea>
+<br><br>
+<h2>3. Writing the Application</h2>
+We will start by writing a domain object to represent a user of our website:
+<br>
+<textarea readonly rows="12" cols="60">
+@Entity
+public class WebsiteUser {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    private long id;
+
+    private String name;
+    private String email;
+
+    // standard getters and setters
+}
+</textarea>
+<br><br>
+Every user has a name and an email, as well as an automatically-generated id. Now we can write a simple repository:
+<br>
+<textarea readonly rows="4" cols="88">
+@RepositoryRestResource(collectionResourceRel = "users", path = "users")
+public interface UserRepository extends PagingAndSortingRepository<WebsiteUser, Long> {
+    List<WebsiteUser> findByName(@Param("name") String name);
+}
+</textarea>
+<br>
+This is an interface that allows you to perform various operations with WebsiteUser objects. We also defined a custom query that will provide a list of users based on a given name.
+
+The @RepositoryRestResource annotation is optional and is used to customize the REST endpoint. If we decided to omit it, Spring would automatically create an endpoint at “/websiteUsers” instead of “/users“.
+<br><br>
+Finally, we will write a standard Spring Boot main class to initialize the application:
+<br>
+<textarea readonly rows="6" cols="88">
+@SpringBootApplication
+public class SpringDataRestApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(SpringDataRestApplication.class, args);
+    }
+}
+</textarea>
+<br>
+That's it! We now have a fully-functional REST API. Let's take a look at it in action.
+<br><br>
+<h2>4. Accessing the REST API</h2>
+If we run the application and go to http://localhost:8080/ in a browser, we will receive the following JSON:
+<br>
+<textarea readonly rows="11" cols="60">
+{
+  "_links" : {
+    "users" : {
+      "href" : "http://localhost:8080/users{?page,size,sort}",
+      "templated" : true
+    },
+    "profile" : {
+      "href" : "http://localhost:8080/profile"
+    }
+  }
+}
+</textarea>
+<br>
+As you can see, there is a “/users” endpoint available, and it already has the “?page“, “?size” and “?sort” options.
+<br>
+There is also a standard “/profile” endpoint, which provides application metadata. It is important to note that the response is structured in a way that follows the constraints of the REST architecture style. Specifically, it provides a uniform interface and self-descriptive messages. This means that each message contains enough information to describe how to process the message.
+<br><br>
+There are no users in our application yet, so going to http://localhost:8080/users would just show an empty list of users. Let's use curl to add a user.
+<br>
+<textarea readonly rows="15" cols="60">
+$ curl -i -X POST -H "Content-Type:application/json" -d '{  "name" : "Test", \
+"email" : "test@test.com" }' http://localhost:8080/users
+{
+  "name" : "test",
+  "email" : "test@test.com",
+  "_links" : {
+    "self" : {
+      "href" : "http://localhost:8080/users/1"
+    },
+    "websiteUser" : {
+      "href" : "http://localhost:8080/users/1"
+    }
+  }
+}
+</textarea>
+<br><br>
+Lets take a look at the response headers as well:
+<br>
+<textarea readonly rows="5" cols="60">
+HTTP/1.1 201 Created
+Server: Apache-Coyote/1.1
+Location: http://localhost:8080/users/1
+Content-Type: application/hal+json;charset=UTF-8
+Transfer-Encoding: chunked
+</textarea>
+<br>
+You will notice that the returned content type is “application/hal+json“. HAL is a simple format that gives a consistent and easy way to hyperlink between resources in your API. The header also automatically contains the Location header, which is the address we can use to access the newly created user.
+<br><br>
+We can now access this user at http://localhost:8080/users/1
+<br>
+<textarea readonly rows="12" cols="60">
+{
+  "name" : "test",
+  "email" : "test@test.com",
+  "_links" : {
+    "self" : {
+      "href" : "http://localhost:8080/users/1"
+    },
+    "websiteUser" : {
+      "href" : "http://localhost:8080/users/1"
+    }
+  }
+}
+</textarea>
+<br>
+You can also use curl or any other REST client to issue PUT, PATCH, and DELETE requests. It also is important to note that Spring Data REST automatically follows the principles of HATEOAS. HATEOAS is one of the constraints of the REST architecture style, and it means that hypertext should be used to find your way through the API.
+<br><br>
+Finally, lets try to access the custom query that we wrote earlier and find all users with the name “test”. This is done by going to http://localhost:8080/users/search/findByName?name=test
+<br>
+<textarea readonly rows="22" cols="60">
+{
+  "_embedded" : {
+    "users" : [ {
+      "name" : "test",
+      "email" : "test@test.com",
+      "_links" : {
+        "self" : {
+          "href" : "http://localhost:8080/users/1"
+        },
+        "websiteUser" : {
+          "href" : "http://localhost:8080/users/1"
+        }
+      }
+    } ]
+  },
+  "_links" : {
+    "self" : {
+      "href" : "http://localhost:8080/users/search/findByName?name=test"
+    }
+  }
+}
+</textarea>
+<br>
+<h2>5. Spring Data REST methods</h2>
+<br>
+POST method adds record in the table
+<br>
+<img src="post_request.png">
+<br>
+GET method retrieves a record by its Id
+<br>
+<img src="get_request.png">
+<br>
+PUT method updates a record provided by its Id
+<br>
+<img src="put_request.png">
+<br>
+DELETE method deletes a record by its Id
+<br>
+<img src="delete_request.png">
+
+<br><br>
+<a href="https://www.baeldung.com/spring-data-rest-intro">Source</a>
+</body>
+</html>
